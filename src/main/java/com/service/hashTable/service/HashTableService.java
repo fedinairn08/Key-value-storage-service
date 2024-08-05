@@ -1,7 +1,13 @@
 package com.service.hashTable.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.service.hashTable.entity.Storage;
 import org.springframework.stereotype.Service;
 
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -11,12 +17,13 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class HashTableService {
+    private static final String FILE_NAME = "dump.json";
     private final Map<String, Object> hashMap = new HashMap<>();
     private final Map<String, Long> recordsLifetime = new HashMap<>();
     private static final long DEFAULT_TTL = 60 * 60 * 1000L;
 
     public HashTableService() {
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleAtFixedRate(this::removeExpiredRecords, 1, 1, TimeUnit.MINUTES);
     }
 
@@ -42,6 +49,54 @@ public class HashTableService {
     public Object remove(String key) {
         recordsLifetime.remove(key);
         return hashMap.remove(key);
+    }
+
+    public boolean dump() throws IOException {
+        Map<String, Storage> mergedMap = merge(hashMap, recordsLifetime);
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        String jacksonData = objectMapper.writeValueAsString(mergedMap);
+
+        Files.write(Paths.get(FILE_NAME), jacksonData.getBytes(StandardCharsets.UTF_8));
+
+        boolean isFileExist = new File (FILE_NAME).exists();
+
+        Files.lines(Paths.get(FILE_NAME), StandardCharsets.UTF_8).forEach(System.out::println);
+
+        return isFileExist;
+    }
+
+    public static Map<String, Storage> merge(Map<String, Object> hashMap, Map<String, Long> recordsLifetime) {
+        Map<String, Storage> mergedMap = new HashMap<>();
+
+        for (Map.Entry<String, Object> entry : hashMap.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            Long expiryTime = recordsLifetime.get(key);
+            mergedMap.put(key, new Storage(value, expiryTime));
+        }
+
+        return mergedMap;
+    }
+
+    public void load() throws IOException {
+        File file = new File(FILE_NAME);
+
+        if (!file.exists()) {
+            throw new IOException("File not found: " + FILE_NAME);
+        }
+
+        String jsonData = Files.readString(Paths.get(FILE_NAME));
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, Storage> loadedMap = objectMapper.readValue(jsonData, objectMapper.getTypeFactory()
+                .constructMapType(HashMap.class, String.class, Storage.class));
+        hashMap.clear();
+        recordsLifetime.clear();
+
+        for (Map.Entry<String, Storage> entry : loadedMap.entrySet()) {
+            hashMap.put(entry.getKey(), entry.getValue().getValue());
+            recordsLifetime.put(entry.getKey(), entry.getValue().getLifeTime());
+        }
     }
 
     private void removeExpiredRecords() {
