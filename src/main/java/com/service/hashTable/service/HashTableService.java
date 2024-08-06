@@ -3,6 +3,7 @@ package com.service.hashTable.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.service.hashTable.entity.Storage;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -57,7 +58,7 @@ public class HashTableService {
         ObjectMapper objectMapper = new ObjectMapper();
         String jacksonData = objectMapper.writeValueAsString(mergedMap);
 
-        Files.write(Paths.get(FILE_NAME), jacksonData.getBytes(StandardCharsets.UTF_8));
+        Files.writeString(Paths.get(FILE_NAME), jacksonData);
 
         boolean isFileExist = new File (FILE_NAME).exists();
 
@@ -79,17 +80,18 @@ public class HashTableService {
         return mergedMap;
     }
 
-    public void load() throws IOException {
-        File file = new File(FILE_NAME);
-
-        if (!file.exists()) {
-            throw new IOException("File not found: " + FILE_NAME);
+    public void load(MultipartFile file) throws IOException {
+        if (file.isEmpty()) {
+            throw new IOException("File is empty");
         }
 
-        String jsonData = Files.readString(Paths.get(FILE_NAME));
+        byte[] fileBytes = file.getBytes();
+        String jsonData = new String(fileBytes, StandardCharsets.UTF_8);
+
         ObjectMapper objectMapper = new ObjectMapper();
         Map<String, Storage> loadedMap = objectMapper.readValue(jsonData, objectMapper.getTypeFactory()
                 .constructMapType(HashMap.class, String.class, Storage.class));
+
         hashMap.clear();
         recordsLifetime.clear();
 
@@ -99,7 +101,7 @@ public class HashTableService {
         }
     }
 
-    private void removeExpiredRecords() {
+    public void removeExpiredRecords() {
         long nowTime = System.currentTimeMillis();
 
         recordsLifetime.forEach((key, expiryTime) -> {

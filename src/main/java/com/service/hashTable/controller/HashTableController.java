@@ -3,10 +3,12 @@ package com.service.hashTable.controller;
 import com.service.hashTable.dto.BaseResponse;
 import com.service.hashTable.service.HashTableService;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,7 +34,7 @@ public class HashTableController {
 
     @PostMapping("/set")
     public ResponseEntity<BaseResponse> set(@RequestParam String key, @RequestParam Object object,
-                                      @RequestParam Long ttl) {
+                                      @RequestParam(required = false) Long ttl) {
         boolean success = hashTableService.set(key, object, ttl);
 
         if (success) {
@@ -60,10 +62,10 @@ public class HashTableController {
             if (isFileCreated) {
                 File file = new File("dump.json");
                 InputStreamResource resource = new InputStreamResource(new FileInputStream(file));
-
                 return ResponseEntity.ok()
-                        .contentLength(file.length())
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=dump.json")
                         .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .contentLength(file.length())
                         .body(resource);
             } else {
                 return ResponseEntity.status(500).build();
@@ -74,10 +76,10 @@ public class HashTableController {
         }
     }
 
-    @GetMapping("/load")
-    public ResponseEntity<String> load() {
+    @PostMapping("/load")
+    public ResponseEntity<String> load(@RequestParam("file") MultipartFile file) {
         try {
-            hashTableService.load();
+            hashTableService.load(file);
             return ResponseEntity.ok("Data loaded successfully");
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to load data: " + e.getMessage());
