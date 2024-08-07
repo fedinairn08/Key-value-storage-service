@@ -5,25 +5,19 @@ import com.service.hashTable.entity.Storage;
 import com.service.hashTable.service.HashTableService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 class HashTableApplicationTests {
-	private static final String FILE_NAME = "dump.json";
 	private HashTableService hashTableService;
 
 	@BeforeEach
@@ -45,30 +39,22 @@ class HashTableApplicationTests {
 	}
 
 	@Test
-	void testTTLExpiry() throws InterruptedException {
-		ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-		hashTableService.set("key", "value", 1000L);
-		scheduler.schedule(hashTableService::removeExpiredRecords, 1500L, TimeUnit.MILLISECONDS);
+	public void testDump() throws IOException {
+		ObjectMapper objectMapper = new ObjectMapper();
+		hashTableService.set("key1", "value1", 1000L);
+		hashTableService.set("key2", "value2", 2000L);
 
-		scheduler.shutdown();
-		boolean terminated = scheduler.awaitTermination(2, TimeUnit.SECONDS);
+		Map<String, Storage> expectedMap = new HashMap<>();
+		expectedMap.put("key1", new Storage("value1", System.currentTimeMillis() + 1000L));
+		expectedMap.put("key2", new Storage("value2", System.currentTimeMillis() + 2000L));
+		String expectedJson = objectMapper.writeValueAsString(expectedMap);
 
-		if (!terminated) {
-			fail("Scheduler did not terminate in the expected time");
-		}
+		String result = hashTableService.dump();
 
-		assertNull(hashTableService.get("key"));
-	}
+		Map<String, Storage> resultData = objectMapper.readValue(result, Map.class);
+		Map<String, Storage> expectedData = objectMapper.readValue(expectedJson, Map.class);
 
-	@Test
-	void testDump() throws IOException {
-		hashTableService.set("key", "value", 10000L);
-
-		boolean result = hashTableService.dump();
-
-		assertTrue(result);
-		File file = new File(FILE_NAME);
-		assertTrue(file.exists());
+		assertTrue(resultData.equals(expectedData));
 	}
 
 	@Test

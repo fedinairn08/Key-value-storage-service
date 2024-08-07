@@ -1,6 +1,7 @@
 package com.service.hashTable.controller;
 
 import com.service.hashTable.dto.BaseResponse;
+import com.service.hashTable.dto.SetRequest;
 import com.service.hashTable.service.HashTableService;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
@@ -13,6 +14,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @RestController
 public class HashTableController {
@@ -33,8 +37,11 @@ public class HashTableController {
     }
 
     @PostMapping("/set")
-    public ResponseEntity<BaseResponse> set(@RequestParam String key, @RequestParam Object object,
-                                      @RequestParam(required = false) Long ttl) {
+    public ResponseEntity<BaseResponse> set(@RequestBody SetRequest request) {
+        String key = request.getKey();
+        Object object = request.getObject();
+        Long ttl = request.getTtl();
+
         boolean success = hashTableService.set(key, object, ttl);
 
         if (success) {
@@ -57,19 +64,19 @@ public class HashTableController {
     @GetMapping("/dump")
     public ResponseEntity<InputStreamResource> dump() {
         try {
-            boolean isFileCreated = hashTableService.dump();
+            String jsonData = hashTableService.dump();
 
-            if (isFileCreated) {
-                File file = new File("dump.json");
-                InputStreamResource resource = new InputStreamResource(new FileInputStream(file));
-                return ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=dump.json")
-                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                        .contentLength(file.length())
-                        .body(resource);
-            } else {
-                return ResponseEntity.status(500).build();
-            }
+            Path tempFile = Files.createTempFile("dump", ".json");
+            Files.writeString(tempFile, jsonData, StandardCharsets.UTF_8);
+
+            File file = tempFile.toFile();
+            InputStreamResource resource = new InputStreamResource(new FileInputStream(file));
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=dump.json")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .contentLength(file.length())
+                    .body(resource);
         } catch (IOException e) {
             e.printStackTrace();
             return ResponseEntity.status(500).build();
@@ -77,7 +84,7 @@ public class HashTableController {
     }
 
     @PostMapping("/load")
-    public ResponseEntity<String> load(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<String> load(MultipartFile file) {
         try {
             hashTableService.load(file);
             return ResponseEntity.ok("Data loaded successfully");
